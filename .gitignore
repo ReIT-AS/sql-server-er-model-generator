@@ -9,3 +9,4 @@ ERD_Output/
 # Temporary filer
 *.tmp
 *.bak
+*.csv
