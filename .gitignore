@@ -1,0 +1,11 @@
+# Ikke sjekk inn sensitive filer
+.env
+*.log
+
+# Output mapper
+erd/
+ERD_Output/
+
+# Temporary filer
+*.tmp
+*.bak
