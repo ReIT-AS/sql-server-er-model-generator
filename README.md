@@ -5,6 +5,7 @@ Dette prosjektet inneholder PowerShell-script som kobler til en SQL Server datab
 ## 📋 Innholdsfortegnelse
 
 - [Oversikt](#-oversikt)
+- [Changelog](#-changelog)
 - [Script](#-script)
 - [Funksjoner](#-funksjoner)
 - [Forutsetninger](#-forutsetninger)
@@ -22,6 +23,15 @@ Prosjektet består av **tre hovedscript** som jobber sammen:
 1. **GetTableStatistics.ps1** - Henter statistikk for alle tabeller
 2. **CreateErModelFromSql.ps1** - Genererer ER-modeller
 3. **FilterDeadTables.ps1** - Identifiserer døde tabeller og lager filtrerte modeller
+
+## 📝 Changelog
+
+### 2026-02-18
+- Korrigert SQL-feil i `GetTableStatistics.ps1` som ga tom statistikk (`GROUP BY`/aggregat for `modify_date`).
+- Implementert utfylling av `LastActivityDate` og `LastWeek` i `table-statistics.csv`.
+- Endret output slik at `dead-tables.csv` lagres i prosjektroten (samme mappe som `table-statistics.csv`).
+- Beholdt ER-filer i `erd` (`schema.full.mmd`, `schema.simple.mmd`, `erd/filtered/schema-active-only.mmd`).
+- Ryddet Problems-varsler i `CreateErModelFromSql.ps1` (ubrukt variabel).
 
 ## 📜 Script
 
@@ -530,6 +540,6 @@ For spørsmål, feilrapporter eller forbedringsforslag:
 
 ---
 
-**Versjon:** 3.0  
-**Sist oppdatert:** Februar 2026  
+**Versjon:** 3.1  
+**Sist oppdatert:** 2026-02-18  
 **Forfatter:** [Ditt navn/organisasjon]
