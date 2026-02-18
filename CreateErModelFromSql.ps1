@@ -229,6 +229,22 @@ function Get-Count {
   return 1  # Single object
 }
 
+function Resolve-ScriptPath {
+  param(
+    [Parameter(Mandatory=$true)]
+    [string]$PathValue
+  )
+
+  $normalized = $PathValue -replace '\\', '/'
+  if (-not [System.IO.Path]::IsPathRooted($normalized)) {
+    if ($normalized.StartsWith('./')) {
+      $normalized = $normalized.Substring(2)
+    }
+    $normalized = Join-Path $PSScriptRoot $normalized
+  }
+  return $normalized
+}
+
 function Invoke-SqlcmdQuery {
   param(
     [string]$ServerInstance,
@@ -331,6 +347,9 @@ try {
   
   # Hent konfigurasjon
   $config = Get-Configuration -EnvVars $envVars
+
+  # Normaliser output-sti (relativt til script-mappe)
+  $config.OutputDir = Resolve-ScriptPath -PathValue $config.OutputDir
   
   # Oppdater logg-nivå fra konfigurasjon
   $LogLevel = $config.LogLevel

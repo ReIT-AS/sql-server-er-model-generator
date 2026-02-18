@@ -45,8 +45,29 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+function Resolve-ScriptPath {
+  param(
+    [Parameter(Mandatory=$true)]
+    [string]$PathValue
+  )
+
+  $normalized = $PathValue -replace '\\', '/'
+  if (-not [System.IO.Path]::IsPathRooted($normalized)) {
+    if ($normalized.StartsWith('./')) {
+      $normalized = $normalized.Substring(2)
+    }
+    $normalized = Join-Path $PSScriptRoot $normalized
+  }
+  return $normalized
+}
+
 try {
   Write-Host "`n========== DEAD TABLE FILTER STARTER ==========" -ForegroundColor Cyan
+
+  # Normaliser stier (relativt til script-mappe)
+  $StatisticsFile = Resolve-ScriptPath -PathValue $StatisticsFile
+  $MermaidFile = Resolve-ScriptPath -PathValue $MermaidFile
+  $OutputDir = Resolve-ScriptPath -PathValue $OutputDir
   
   # Sjekk at filer finnes
   if (-not (Test-Path $StatisticsFile)) {
