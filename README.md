@@ -43,7 +43,7 @@ Kombinerer statistikk med ER-modell:
 - Identifiserer døde tabeller (ingen records eller ingen aktivitet)
 - Genererer CSV med døde tabeller
 - Lager filtrert ER-modell med kun aktive tabeller
-- Output: `dead-tables.csv`, `schema-active-only.mmd`
+- Output: `dead-tables.csv` (i prosjektrot), `erd/filtered/schema-active-only.mmd`
 
 ## ✨ Funksjoner
 
@@ -69,7 +69,7 @@ Prosjektet genererer følgende output:
 - Viser relasjoner mellom tabeller
 - Ideell for presentasjoner og høynivå-dokumentasjon
 
-### 4. **Døde Tabeller** (`erd/filtered/dead-tables.csv`)
+### 4. **Døde Tabeller** (`dead-tables.csv`)
 - Liste over tabeller uten records
 - Tabeller uten aktivitet siste periode
 - For opprydding og databaseoptimalisering
@@ -179,6 +179,22 @@ For å få komplett oversikt over databasen, kjør scriptene i denne rekkefølge
 .\FilterDeadTables.ps1
 ```
 
+### Quick run (nåværende oppsett)
+
+```powershell
+# Fra prosjektroten: PS Script/CreateErModelFromSql
+.\GetTableStatistics.ps1 -UseEnvFile -OutputFile ".\table-statistics.csv"
+.\CreateErModelFromSql.ps1 -UseEnvFile
+.\FilterDeadTables.ps1 -StatisticsFile ".\table-statistics.csv" -MermaidFile ".\erd\schema.simple.mmd" -OutputDir ".\erd\filtered"
+```
+
+Forventet output:
+- `table-statistics.csv` (rot)
+- `dead-tables.csv` (rot)
+- `erd/schema.full.mmd`
+- `erd/schema.simple.mmd`
+- `erd/filtered/schema-active-only.mmd`
+
 ### Script 1: GetTableStatistics.ps1
 
 **Med .env fil (Anbefalt):**
@@ -266,19 +282,20 @@ $cred = Get-Credential
 |-----------|------|-------------|----------|
 | `-StatisticsFile` | string | Input CSV med tabellstatistikk | `.\table-statistics.csv` |
 | `-MermaidFile` | string | Input Mermaid ERD-fil | `.\erd\schema.simple.mmd` |
-| `-OutputDir` | string | Utdata mappe | `.\erd\filtered` |
+| `-OutputDir` | string | Utdata mappe for filtrert ER-modell | `.\erd\filtered` |
 | `-MinRowCount` | int | Minimalt antall rader for å være "aktiv" | `1` |
 
-## 📤 Utdata
+`dead-tables.csv` skrives alltid i samme mappe som `-StatisticsFile`.
 
+## 📤 Utdata
 ### Output fra GetTableStatistics.ps1
 
 #### `table-statistics.csv`
 ```csv
-SchemaName,TableName,FullName,TableRowCount,LatestActivityDate,IsEmpty
-dbo,Customers,dbo.Customers,1234,2026-02-15,False
-dbo,Orders,dbo.Orders,5678,2026-02-17,False
-dbo,OldTable,dbo.OldTable,0,NULL,True
+SchemaName,TableName,FullName,TableRowCount,LastActivityDate,IsEmpty,LastWeek
+dbo,Customers,dbo.Customers,1234,2026-02-15 10:35:00,False,True
+dbo,Orders,dbo.Orders,5678,2026-02-17 08:10:00,False,True
+dbo,OldTable,dbo.OldTable,0,2024-11-20 14:22:00,True,False
 ```
 
 ### Output fra CreateErModelFromSql.ps1
@@ -326,7 +343,7 @@ erDiagram
 
 ### Output fra FilterDeadTables.ps1
 
-#### 1. `erd/filtered/dead-tables.csv`
+#### 1. `dead-tables.csv` (i prosjektrot)
 ```csv
 SchemaName,TableName,FullName,TableRowCount
 dbo,OldTable,dbo.OldTable,0

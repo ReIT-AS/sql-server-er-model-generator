@@ -279,7 +279,6 @@ function Invoke-SqlcmdQuery {
     # Filtrér bort tomme linjer og message-linjer fra sql server
     # Behold første linje (header) og alle data-linjer
     $result = @()
-    $headerSkipped = $false
     foreach ($line in $output) {
       # Skip helt tomme linjer
       if (-not $line -or -not $line.Trim()) { continue }
@@ -312,7 +311,7 @@ function Test-DatabaseConnection {
   Write-Log "Tester database-tilkobling til $ServerInstance.$Database..." -Level INFO
   
   try {
-    $result = Invoke-SqlcmdQuery -ServerInstance $ServerInstance -Database $Database -Credential $Credential -Query "SELECT @@VERSION AS Version"
+    $null = Invoke-SqlcmdQuery -ServerInstance $ServerInstance -Database $Database -Credential $Credential -Query "SELECT @@VERSION AS Version"
     Write-Log "Tilkobling vellykket" -Level INFO
     return $true
   }

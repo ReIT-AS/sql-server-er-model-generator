@@ -310,10 +310,19 @@ SELECT
   t.name AS TableName,
   s.name + '.' + t.name AS FullName,
   ISNULL(SUM(p.rows), 0) AS TableRowCount,
-  CASE WHEN ISNULL(SUM(p.rows), 0) = 0 THEN 'true' ELSE 'false' END AS IsEmpty
+  COALESCE(MAX(ius.last_user_update), MAX(t.modify_date)) AS LastActivityDate,
+    CASE 
+    WHEN COALESCE(MAX(ius.last_user_update), MAX(t.modify_date)) >= DATEADD(DAY, -7, SYSUTCDATETIME()) THEN 'true'
+      ELSE 'false'
+    END AS LastWeek,
+    CASE WHEN ISNULL(SUM(p.rows), 0) = 0 THEN 'true' ELSE 'false' END AS IsEmpty
 FROM sys.tables t
 JOIN sys.schemas s ON s.schema_id = t.schema_id
 LEFT JOIN sys.partitions p ON p.object_id = t.object_id AND p.index_id IN (0, 1)
+  LEFT JOIN sys.dm_db_index_usage_stats ius 
+    ON ius.database_id = DB_ID()
+    AND ius.object_id = t.object_id
+    AND ius.index_id IN (0, 1)
 WHERE t.is_ms_shipped = 0
 GROUP BY s.name, t.name, s.schema_id
 ORDER BY s.name, t.name;
@@ -343,8 +352,21 @@ ORDER BY s.name, t.name;
     foreach ($stat in $statistics) {
       $stat.TableRowCount = [int]$stat.TableRowCount
       $stat.IsEmpty = $stat.IsEmpty -eq 'true'
-      $stat | Add-Member -MemberType NoteProperty -Name "LastActivityDate" -Value "" -Force
-      $stat | Add-Member -MemberType NoteProperty -Name "LastWeek" -Value $null -Force
+
+      if ($stat.LastActivityDate -and $stat.LastActivityDate.Trim() -and $stat.LastActivityDate.Trim().ToUpperInvariant() -ne 'NULL') {
+        try {
+          $parsedDate = [datetime]$stat.LastActivityDate
+          $stat.LastActivityDate = $parsedDate.ToString('yyyy-MM-dd HH:mm:ss')
+        }
+        catch {
+          Write-Log "Kunne ikke parse LastActivityDate '$($stat.LastActivityDate)' for $($stat.FullName)" -Level WARNING
+        }
+      }
+      else {
+        $stat.LastActivityDate = ""
+      }
+
+      $stat.LastWeek = $stat.LastWeek -eq 'true'
     }
   }
   catch {
@@ -362,9 +384,9 @@ ORDER BY s.name, t.name;
     Write-Log "CSV skrevet: $OutputFile" -Level INFO
     
     # Statistikk-sammendrag
-    $emptyTableCount = ($statistics | Where-Object { $_.IsEmpty -eq 'True' } | Measure-Object).Count
+    $emptyTableCount = ($statistics | Where-Object { $_.IsEmpty } | Measure-Object).Count
     $largeTableCount = ($statistics | Where-Object { [int]$_.TableRowCount -gt 1000000 } | Measure-Object).Count
-    $recentActivityCount = 0  # TODO: implementer dato-tracking senere
+    $recentActivityCount = ($statistics | Where-Object { $_.LastWeek } | Measure-Object).Count
     
     Write-Host "`n✓ Ferdig!" -ForegroundColor Green
     Write-Host "  - Totalt tabeller:        $(Get-Count $statistics)" -ForegroundColor Cyan

@@ -15,7 +15,8 @@
   Mermaid ERD-fil å filtrere (default: .\erd\schema.simple.mmd)
 
 .PARAMETER OutputDir
-  Output-mappe (default: .\erd\filtered)
+  Output-mappe for filtrert ER-modell (default: .\erd\filtered).
+  dead-tables.csv skrives alltid ved siden av StatisticsFile.
 
 .PARAMETER MinRowCount
   Minimalt antall rader for å være "aktiv" (default: 1)
@@ -89,7 +90,8 @@ try {
   Write-Host "    - Døde tabeller:        $(($emptyTables | Measure-Object).Count)" -ForegroundColor Red
   
   # ===== EKSPORTER LISTER =====
-  $deadTablesFile = Join-Path $OutputDir "dead-tables.csv"
+  $statisticsDir = Split-Path -Parent (Resolve-Path $StatisticsFile)
+  $deadTablesFile = Join-Path $statisticsDir "dead-tables.csv"
   $emptyTables | Select-Object SchemaName, TableName, FullName, TableRowCount | `
     Export-Csv -Path $deadTablesFile -Encoding UTF8 -NoTypeInformation
   Write-Host "`n  ✓ Eksportert døde tabeller til: $deadTablesFile" -ForegroundColor Green
