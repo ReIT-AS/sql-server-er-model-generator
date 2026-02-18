@@ -197,6 +197,31 @@ function Get-Count {
   return 1
 }
 
+function Export-CsvUtf8Bom {
+  param(
+    [Parameter(Mandatory=$true)]
+    [object[]]$InputObject,
+
+    [Parameter(Mandatory=$true)]
+    [string]$Path,
+
+    [switch]$Force
+  )
+
+  $csvLines = @($InputObject | ConvertTo-Csv -NoTypeInformation)
+  $parentPath = Split-Path -Parent $Path
+  if ($parentPath -and -not (Test-Path $parentPath)) {
+    New-Item -ItemType Directory -Path $parentPath -Force | Out-Null
+  }
+
+  if ((Test-Path $Path) -and -not $Force) {
+    throw "Filen finnes allerede: $Path"
+  }
+
+  $utf8Bom = New-Object System.Text.UTF8Encoding($true)
+  [System.IO.File]::WriteAllLines($Path, $csvLines, $utf8Bom)
+}
+
 function Invoke-SqlcmdQuery {
   param(
     [string]$ServerInstance,
@@ -378,8 +403,8 @@ ORDER BY s.name, t.name;
   Write-Log "Skriver resultat til CSV: $OutputFile" -Level INFO
   
   try {
-    $statistics | Select-Object SchemaName, TableName, FullName, TableRowCount, LastActivityDate, IsEmpty, LastWeek | `
-      Export-Csv -Path $OutputFile -Encoding UTF8 -NoTypeInformation -Force
+    $csvOutput = $statistics | Select-Object SchemaName, TableName, FullName, TableRowCount, LastActivityDate, IsEmpty, LastWeek
+    Export-CsvUtf8Bom -InputObject $csvOutput -Path $OutputFile -Force
     
     Write-Log "CSV skrevet: $OutputFile" -Level INFO
     

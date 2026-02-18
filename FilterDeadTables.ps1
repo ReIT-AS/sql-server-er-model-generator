@@ -45,6 +45,31 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+function Export-CsvUtf8Bom {
+  param(
+    [Parameter(Mandatory=$true)]
+    [object[]]$InputObject,
+
+    [Parameter(Mandatory=$true)]
+    [string]$Path,
+
+    [switch]$Force
+  )
+
+  $csvLines = @($InputObject | ConvertTo-Csv -NoTypeInformation)
+  $parentPath = Split-Path -Parent $Path
+  if ($parentPath -and -not (Test-Path $parentPath)) {
+    New-Item -ItemType Directory -Path $parentPath -Force | Out-Null
+  }
+
+  if ((Test-Path $Path) -and -not $Force) {
+    throw "Filen finnes allerede: $Path"
+  }
+
+  $utf8Bom = New-Object System.Text.UTF8Encoding($true)
+  [System.IO.File]::WriteAllLines($Path, $csvLines, $utf8Bom)
+}
+
 function Resolve-ScriptPath {
   param(
     [Parameter(Mandatory=$true)]
@@ -113,8 +138,8 @@ try {
   # ===== EKSPORTER LISTER =====
   $statisticsDir = Split-Path -Parent (Resolve-Path $StatisticsFile)
   $deadTablesFile = Join-Path $statisticsDir "dead-tables.csv"
-  $emptyTables | Select-Object SchemaName, TableName, FullName, TableRowCount | `
-    Export-Csv -Path $deadTablesFile -Encoding UTF8 -NoTypeInformation
+  $deadTableCsv = $emptyTables | Select-Object SchemaName, TableName, FullName, TableRowCount
+  Export-CsvUtf8Bom -InputObject $deadTableCsv -Path $deadTablesFile -Force
   Write-Host "`n  ✓ Eksportert døde tabeller til: $deadTablesFile" -ForegroundColor Green
   
   $activeTablesList = $activeTables | ForEach-Object { $_.FullName }

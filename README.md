@@ -32,6 +32,7 @@ Prosjektet består av **tre hovedscript** som jobber sammen:
 - Endret output slik at `dead-tables.csv` lagres i prosjektroten (samme mappe som `table-statistics.csv`).
 - Beholdt ER-filer i `erd` (`schema.full.mmd`, `schema.simple.mmd`, `erd/filtered/schema-active-only.mmd`).
 - Ryddet Problems-varsler i `CreateErModelFromSql.ps1` (ubrukt variabel).
+- Korrigert CSV-encoding til UTF-8 med BOM for korrekt visning av `ÆØÅ` i Excel/CSV-visere.
 
 ## 📜 Script
 
