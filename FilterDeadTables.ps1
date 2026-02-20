@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Kombinerer ER-modell med tabellstatistikk for å identifisere "døde" tabeller.
 
@@ -110,10 +110,21 @@ try {
   
   # Les statistikk
   $stats = Import-Csv $StatisticsFile
-  Write-Host "  ✓ Lastet $(($stats | Measure-Object).Count) tabeller fra statistikk" -ForegroundColor Green
-  
-  # Les Mermaid-fil
-  $mermaidContent = Get-Content $MermaidFile -Raw
+  Write-Host "  Lastet $(($stats | Measure-Object).Count) tabeller fra statistikk" -ForegroundColor Green
+
+  $mermaidContent = $null
+  try {
+    $mermaidContent = Get-Content -Path $MermaidFile -Raw -ErrorAction Stop
+  }
+  catch {
+    $errMsg = $_.Exception.Message
+    throw "Kunne ikke lese Mermaid-filen: $MermaidFile. Årsak: $errMsg"
+  }
+
+  if (-not $mermaidContent) {
+    throw "Mermaid-filen ble les som tom: $MermaidFile"
+  }
+
   
   # ===== KATEGORISER TABELLER =====
   $emptyTables = @()
@@ -130,7 +141,7 @@ try {
     }
   }
   
-  Write-Host "`n  📊 STATISTIKK:" -ForegroundColor Yellow
+  Write-Host "`n  STATISTIKK:" -ForegroundColor Yellow
   Write-Host "    - Totalt tabeller:      $(($stats | Measure-Object).Count)" -ForegroundColor Cyan
   Write-Host "    - Aktive tabeller:      $(($activeTables | Measure-Object).Count)" -ForegroundColor Green
   Write-Host "    - Døde tabeller:        $(($emptyTables | Measure-Object).Count)" -ForegroundColor Red
@@ -140,7 +151,7 @@ try {
   $deadTablesFile = Join-Path $statisticsDir "dead-tables.csv"
   $deadTableCsv = $emptyTables | Select-Object SchemaName, TableName, FullName, TableRowCount
   Export-CsvUtf8Bom -InputObject $deadTableCsv -Path $deadTablesFile -Force
-  Write-Host "`n  ✓ Eksportert døde tabeller til: $deadTablesFile" -ForegroundColor Green
+  Write-Host "`n   Eksportert døde tabeller til: $deadTablesFile" -ForegroundColor Green
   
   $activeTablesList = $activeTables | ForEach-Object { $_.FullName }
   
@@ -173,7 +184,7 @@ try {
       }
     }
     # Behold relationship-linjer der begge entiteter er aktive
-    elseif ($line -match '\|\||-|--|') {
+    elseif ($line -match '--') {
       $parts = $line -split '\s+' | Where-Object { $_ }
       if ($parts.Count -ge 3) {
         $fromEntity = $parts[0]
@@ -192,10 +203,10 @@ try {
   
   $filteredMermaidFile = Join-Path $OutputDir "schema-active-only.mmd"
   [System.IO.File]::WriteAllText($filteredMermaidFile, $filteredMermaid.ToString(), [System.Text.Encoding]::UTF8)
-  Write-Host "  ✓ Filtrert Mermaid-modell skrevet til: $filteredMermaidFile" -ForegroundColor Green
+  Write-Host "   Filtrert Mermaid-modell skrevet til: $filteredMermaidFile" -ForegroundColor Green
   
   # ===== OPPSUMMERING =====
-  Write-Host "`n  💡 ANBEFALINGER:" -ForegroundColor Yellow
+  Write-Host "`n  ANBEFALINGER:" -ForegroundColor Yellow
   Write-Host "    1. Gjennomgang av døde tabeller:" -ForegroundColor Cyan
   Write-Host "       - Åpne: $deadTablesFile" -ForegroundColor Gray
   Write-Host "       - Bekreft med forretningsteam før sletting" -ForegroundColor Gray
@@ -206,11 +217,11 @@ try {
   Write-Host "       - Bruk 'dead-tables.csv' som referanse" -ForegroundColor Gray
   Write-Host "       - Generer DROP TABLE-script hvis ønskelig" -ForegroundColor Gray
   
-  Write-Host "`n✓ Ferdig!" -ForegroundColor Green
+  Write-Host "`n Ferdig!" -ForegroundColor Green
 }
 catch {
-  Write-Host "`n✗ Feil oppstod:" -ForegroundColor Red
-  Write-Host "  $($_.Exception.Message)" -ForegroundColor Red
+  Write-Host "`n Feil oppstod:" -ForegroundColor Red
+  Write-Host "$($_.Exception.Message)" -ForegroundColor Red
   exit 1
 }
 finally {
