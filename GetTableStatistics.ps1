@@ -85,16 +85,16 @@ function Write-Log {
   param(
     [Parameter(Mandatory=$true)]
     [string]$Message,
-    
+
     [Parameter(Mandatory=$false)]
     [ValidateSet("DEBUG", "INFO", "WARNING", "ERROR")]
     [string]$Level = "INFO"
   )
-  
+
   if ($script:LogLevelValue[$Level] -ge $script:LogLevelValue[$LogLevel]) {
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     $logMessage = "[$timestamp] [$Level] $Message"
-    
+
     switch ($Level) {
       "DEBUG"   { Write-Host $logMessage -ForegroundColor Gray }
       "INFO"    { Write-Host $logMessage -ForegroundColor White }
@@ -109,16 +109,16 @@ function Read-EnvFile {
   param(
     [string]$Path = (Join-Path $PSScriptRoot ".env")
   )
-  
+
   Write-Log "Leser miljøvariabler fra: $Path" -Level DEBUG
-  
+
   if (-not (Test-Path $Path)) {
     Write-Log ".env fil ikke funnet på: $Path" -Level WARNING
     return @{}
   }
-  
+
   $envVars = @{}
-  
+
   try {
     Get-Content $Path | ForEach-Object {
       $line = $_.Trim()
@@ -137,55 +137,56 @@ function Read-EnvFile {
     Write-Log "Feil ved lesing av .env fil: $($_.Exception.Message)" -Level ERROR
     throw
   }
-  
+
   return $envVars
 }
 
 function Get-Configuration {
   param($EnvVars)
-  
+
   $config = @{}
-  
+
   if ($UseEnvFile -or (-not $ServerInstance -and -not $Database)) {
     Write-Log "Bruker konfigurasjon fra .env fil" -Level INFO
-    
+
     if (-not $EnvVars['DB_SERVER_INSTANCE']) {
       throw "DB_SERVER_INSTANCE mangler i .env fil"
     }
     if (-not $EnvVars['DB_DATABASE']) {
       throw "DB_DATABASE mangler i .env fil"
     }
-    
+
     $config.ServerInstance = $EnvVars['DB_SERVER_INSTANCE']
     $config.Database = $EnvVars['DB_DATABASE']
+    $config.SqlCredential = $null
     if ($EnvVars['DB_USERNAME'] -and $EnvVars['DB_PASSWORD']) {
       try {
         $sec = ConvertTo-SecureString -String $EnvVars['DB_PASSWORD'] -AsPlainText -Force
         $config.SqlCredential = New-Object System.Management.Automation.PSCredential ($EnvVars['DB_USERNAME'], $sec)
       } catch { throw "Kunne ikke lage PSCredential fra .env: $($_.Exception.Message)" }
     }
-    $config.SchemaFilter = if ($EnvVars['SCHEMA_FILTER']) { 
+    $config.SchemaFilter = if ($EnvVars['SCHEMA_FILTER']) {
       @($EnvVars['SCHEMA_FILTER'] -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-    } else { 
-      @() 
+    } else {
+      @()
     }
   }
   else {
     Write-Log "Bruker konfigurasjon fra kommandolinje-parametere" -Level INFO
-    
+
     if (-not $ServerInstance) {
       throw "ServerInstance parameter er påkrevd"
     }
     if (-not $Database) {
       throw "Database parameter er påkrevd"
     }
-    
+
     $config.ServerInstance = $ServerInstance
     $config.Database = $Database
     $config.SqlCredential = $SqlCredential
     $config.SchemaFilter = $SchemaFilter
   }
-  
+
   return $config
 }
 
@@ -229,15 +230,17 @@ function Invoke-SqlcmdQuery {
     [string]$Query,
     [pscredential]$Credential
   )
-  
+
   Write-Log "Utfører spørring mot $ServerInstance.$Database..." -Level DEBUG
-  
-  $tempQueryFile = Join-Path $env:TMPDIR "query_$(Get-Random).sql"
-  
+
+  $tempDir = if ($env:TEMP) { $env:TEMP } else { [System.IO.Path]::GetTempPath() }
+  $tempQueryFile = Join-Path $tempDir "query_$(Get-Random).sql"
+
+
   try {
     $fullQuery = "SET NOCOUNT ON`nSET ANSI_WARNINGS OFF`n" + $Query
     Set-Content -Path $tempQueryFile -Value $fullQuery -Encoding UTF8 -ErrorAction Stop
-    
+
     $sqlcmdArgs = @(
       "-S", $ServerInstance
       "-d", $Database
@@ -245,8 +248,9 @@ function Invoke-SqlcmdQuery {
       "-W"
       "-s", "|"
       "-w", "256"
+      "-C"
     )
-    
+
     if ($Credential) {
       Write-Log "Bruker SQL autentisering" -Level DEBUG
       $password = [Runtime.InteropServices.Marshal]::PtrToStringUni([Runtime.InteropServices.Marshal]::SecureStringToBSTR($Credential.Password))
@@ -257,14 +261,14 @@ function Invoke-SqlcmdQuery {
       Write-Log "Bruker Windows/Azure AD autentisering" -Level DEBUG
       $sqlcmdArgs += "-E"
     }
-    
+
     $output = & sqlcmd @sqlcmdArgs 2>&1
-    
+
     if ($LASTEXITCODE -ne 0) {
       Write-Log "sqlcmd feilet med exit code $LASTEXITCODE" -Level ERROR
       throw "sqlcmd feilet: $output"
     }
-    
+
     $result = @()
     foreach ($line in $output) {
       if (-not $line -or -not $line.Trim()) { continue }
@@ -289,21 +293,21 @@ function Invoke-SqlcmdQuery {
 # ========== MAIN SCRIPT ==========
 try {
   Write-Log "========== TABLE STATISTICS EXTRACTOR STARTER ==========" -Level INFO
-  
+
   # Les miljøvariabler
   $envVars = Read-EnvFile
-  
+
   # Hent konfigurasjon
   $config = Get-Configuration -EnvVars $envVars
-  
+
   Write-Log "Konfigurasjon:" -Level INFO
   Write-Log "  Server: $($config.ServerInstance)" -Level INFO
   Write-Log "  Database: $($config.Database)" -Level INFO
   Write-Log "  Output: $OutputFile" -Level INFO
-  
+
   # ========== HENT TABELLER ==========
   Write-Log "Henter alle tabeller..." -Level INFO
-  
+
   $tablesQuery = @"
 SELECT
   s.name AS SchemaName,
@@ -318,16 +322,16 @@ ORDER BY s.name, t.name;
   $tablesOutput = Invoke-SqlcmdQuery -ServerInstance $config.ServerInstance -Database $config.Database -Query $tablesQuery -Credential $config.SqlCredential
   $tables = @($tablesOutput | ConvertFrom-Csv -Delimiter '|')
   Write-Log "Hentet $(Get-Count $tables) tabeller" -Level INFO
-  
+
   $filterCount = if ($config.SchemaFilter) { (Get-Count $config.SchemaFilter) } else { 0 }
   if ($filterCount -gt 0) {
     $tables = @($tables | Where-Object { $config.SchemaFilter -contains $_.SchemaName })
     Write-Log "Filtrert ned til $(Get-Count $tables) tabeller basert på schema-filter" -Level INFO
   }
-  
+
   # ========== HENT STATISTIKK FOR ALLE TABELLER ==========
   Write-Log "Henter statistikk for alle tabeller..." -Level INFO
-  
+
   # En enkelt, robust spørring som henter radantall for alle tabeller
   $statsQuery = @"
 SELECT
@@ -360,19 +364,19 @@ ORDER BY s.name, t.name;
       Write-Log "Første 3 linjer:" -Level DEBUG
       $statsOutput | Select-Object -First 3 | ForEach-Object { Write-Log "  '$_'" -Level DEBUG }
     }
-    
+
     if ((Get-Count $statsOutput) -eq 0) {
       throw "SQL-spørring returnerte ingen data"
     }
-    
+
     $statistics = @($statsOutput | ConvertFrom-Csv -Delimiter '|' -ErrorAction Stop)
     Write-Log "Hentet statistikk for $(Get-Count $statistics) tabeller" -Level INFO
-    
+
     if ((Get-Count $statistics) -gt 0) {
       Write-Log "Første statistikk-objekt egenskaper:" -Level DEBUG
       $statistics[0].PSObject.Properties | ForEach-Object { Write-Log "  - $($_.Name): $($_.Value)" -Level DEBUG }
     }
-    
+
     # Normaliser felt
     foreach ($stat in $statistics) {
       $stat.TableRowCount = [int]$stat.TableRowCount
@@ -398,22 +402,25 @@ ORDER BY s.name, t.name;
     Write-Log "Feil ved henting av statistikk: $($_.Exception.Message)" -Level ERROR
     throw
   }
-  
+
   # ========== SKRIV RESULTAT TIL CSV ==========
+  if (-not [System.IO.Path]::IsPathRooted($OutputFile)) { # User MAY be elevated ...just saying ...prevent file from being written to windows/System32
+    $OutputFile = Join-Path $PSScriptRoot $OutputFile
+  }
   Write-Log "Skriver resultat til CSV: $OutputFile" -Level INFO
-  
+
   try {
     $csvOutput = $statistics | Select-Object SchemaName, TableName, FullName, TableRowCount, LastActivityDate, IsEmpty, LastWeek
     Export-CsvUtf8Bom -InputObject $csvOutput -Path $OutputFile -Force
-    
+
     Write-Log "CSV skrevet: $OutputFile" -Level INFO
-    
+
     # Statistikk-sammendrag
     $emptyTableCount = ($statistics | Where-Object { $_.IsEmpty } | Measure-Object).Count
     $largeTableCount = ($statistics | Where-Object { [int]$_.TableRowCount -gt 1000000 } | Measure-Object).Count
     $recentActivityCount = ($statistics | Where-Object { $_.LastWeek } | Measure-Object).Count
-    
-    Write-Host "`n✓ Ferdig!" -ForegroundColor Green
+
+    Write-Host "`nFerdig!" -ForegroundColor Green
     Write-Host "  - Totalt tabeller:        $(Get-Count $statistics)" -ForegroundColor Cyan
     Write-Host "  - Tomme tabeller:         $emptyTableCount" -ForegroundColor Yellow
     Write-Host "  - Tabeller > 1M rader:    $largeTableCount" -ForegroundColor Cyan
@@ -428,10 +435,10 @@ ORDER BY s.name, t.name;
 catch {
   Write-Log "========== KRITISK FEIL ==========" -Level ERROR
   Write-Log "Feilmelding: $($_.Exception.Message)" -Level ERROR
-  
-  Write-Host "`n✗ Feil oppstod" -ForegroundColor Red
+
+  Write-Host "`nFeil oppstod" -ForegroundColor Red
   Write-Host "  $($_.Exception.Message)" -ForegroundColor Red
-  
+
   exit 1
 }
 finally {

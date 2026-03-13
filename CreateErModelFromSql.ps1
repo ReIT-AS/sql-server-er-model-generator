@@ -174,6 +174,7 @@ function Get-Configuration {
     
     $config.ServerInstance = $EnvVars['DB_SERVER_INSTANCE']
     $config.Database = $EnvVars['DB_DATABASE']
+    $config.SqlCredential = $null
     if ($EnvVars['DB_USERNAME'] -and $EnvVars['DB_PASSWORD']) {
       try {
         $sec = ConvertTo-SecureString -String $EnvVars['DB_PASSWORD'] -AsPlainText -Force
@@ -254,9 +255,11 @@ function Invoke-SqlcmdQuery {
   )
   
   Write-Log "Utfører spørring mot $ServerInstance.$Database..." -Level DEBUG
-  
-  $tempQueryFile = Join-Path $env:TMPDIR "query_$(Get-Random).sql"
-  
+
+  $tempDir = if ($env:TEMP) { $env:TEMP } else { [System.IO.Path]::GetTempPath() }
+  $tempQueryFile = Join-Path $tempDir "query_$(Get-Random).sql"
+
+
   try {
     # Legg til RAW OUTPUT formatering
     $fullQuery = "SET NOCOUNT ON`nSET ANSI_WARNINGS OFF`n" + $Query
@@ -269,6 +272,7 @@ function Invoke-SqlcmdQuery {
       "-W"  # Trim trailing spaces
       "-s", "|"  # Column separator
       "-w", "256"  # Wide output
+      "-C" # I SAID ....ACCEPT
     )
     
     # Legg til autentisering
@@ -668,7 +672,7 @@ ORDER BY fk.name, fkc.constraint_column_id;
 
   # Refs (bruker første kolonnepar for navn, men skriver én Ref per FK – dbdiagram tåler dette fint)
   foreach ($fkGroup in $fkByName) {
-    $rows = $fkGroup.Group | Sort-Object Ordinal
+    $rows = @($fkGroup.Group | Sort-Object Ordinal)
     $fkName = $rows[0].ForeignKeyName
 
     # For kompositt-FK: DBML støtter også (a,b) - (x,y), men vi holder det enkelt:
@@ -703,7 +707,7 @@ ORDER BY fk.name, fkc.constraint_column_id;
     Write-Log "Skrevet: $dbmlPath" -Level DEBUG
 
     Write-Log "========== ER-MODELLER GENERERT VELLYKKET ==========" -Level INFO
-    Write-Host "`n✓ Ferdig!" -ForegroundColor Green
+    Write-Host "`n Ferdig!" -ForegroundColor Green
     Write-Host "  - Mermaid full:   $fullPath" -ForegroundColor Cyan
     Write-Host "  - Mermaid simple: $simplePath" -ForegroundColor Cyan
     Write-Host "  - DBML:           $dbmlPath" -ForegroundColor Cyan
@@ -721,7 +725,7 @@ catch {
   Write-Log "Feilmelding: $($_.Exception.Message)" -Level ERROR
   Write-Log "Stack Trace: $($_.ScriptStackTrace)" -Level DEBUG
   
-  Write-Host "`n✗ Feil oppstod under generering av ER-modeller" -ForegroundColor Red
+  Write-Host "`n Feil oppstod under generering av ER-modeller" -ForegroundColor Red
   Write-Host "  $($_.Exception.Message)" -ForegroundColor Red
   Write-Host "`nSjekk loggfil for detaljer: $script:LogFilePath" -ForegroundColor Yellow
   
